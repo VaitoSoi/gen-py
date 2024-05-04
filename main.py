@@ -238,8 +238,8 @@ class GenerateTest:
 
     # Parsing
 
-    def parse_cmd_line(self, code: str, split: str = " ") -> str:
-        # print(code)
+    def parse_cmd_line(self, code: str, split: str = " ", metadata: Dict[str, Any] = {}) -> str:
+        # print(code, f"'{split}'")
         if (
             re.search(self.regex["array_1d"], code) is not None
             or re.search(self.regex["array_2d"], code) is not None
@@ -249,7 +249,7 @@ class GenerateTest:
 
         cmds = code.split(";")
 
-        return split.join([self.parse_command(cmd) for cmd in cmds]) 
+        return split.join([self.parse_command(cmd, metadata) for cmd in cmds]) if len(cmds) > 1 else self.parse_command(cmds[0], metadata=metadata) + split
     
     def parse_array(self, code: str) -> str:
         result: str = ""
@@ -275,14 +275,17 @@ class GenerateTest:
             if re.search(self.regex["array_2d_split"], code) is not None
             else " "
         )
-        if re.search(self.regex["array_sequence"], command) is not None:
+        is_array_sequence = re.search(self.regex["array_sequence"], command) is not None
+        is_array_reverse_sequence = re.search(self.regex["array_reverse_sequence"], command) is not None
+
+        if is_array_sequence:
             start, stop = [
                 int(self.cache.get(ind, ind))
                 for ind in re.findall(self.regex["array_sequence"], command)[0]
             ]
             if start < stop:
                 raise ValueError("invalid sequence")
-        elif re.search(self.regex["array_reverse_sequence"], command) is not None:
+        elif is_array_reverse_sequence:
             start, stop = [
                 int(self.cache.get(ind, ind))
                 for ind in re.findall(self.regex["array_reverse_sequence"], command)[0]
@@ -291,9 +294,9 @@ class GenerateTest:
                 raise ValueError("invalid reverse sequence")
 
         last_value: str = ""
-        for i in range(rows):
+        for row in range(rows):
             value: str = ""
-            if re.search(self.regex["array_sequence"], command) is not None:
+            if is_array_sequence:
                 args = [
                     int(self.cache.get(ind, ind))
                     for ind in re.findall(self.regex["array_sequence"], command)[0]
@@ -311,7 +314,7 @@ class GenerateTest:
                 )
                 last_value = value
                 value += split
-            elif re.search(self.regex["array_reverse_sequence"], command) is not None:
+            elif is_array_reverse_sequence:
                 args = [
                     int(self.cache.get(ind, ind))
                     for ind in re.findall(
@@ -328,13 +331,15 @@ class GenerateTest:
                 last_value = value
                 value += split
             else:
-                value = "".join([self.parse_cmd_line(command, split) for _ in range(columns)])
+                vals = [self.parse_cmd_line(command, split, { "row": row, "column": column }) for column in range(columns)]
+                value = "".join(vals)
+                # print(vals)
 
             result += f"{value}\n"
 
         return result
 
-    def parse_command(self, code: str) -> str:
+    def parse_command(self, code: str, metadata: Dict[str, Any] = {}) -> str:
         if re.search(self.regex["assign"], code) is not None:
             key, cmd = re.findall(self.regex["assign"], code)[0]
             
@@ -355,8 +360,10 @@ class GenerateTest:
             return str(random.randint(min(start, stop), max(start, stop))) if start != stop else str(start)
         elif re.search(self.regex["eval"], code) is not None:
 
-            def get(key: Any) -> Any:
+            def get(key: str) -> str:
                 return self.cache.get(key, key)
+            row = metadata.get("row", -1) # noqa: F841
+            column = metadata.get("column", -1) # noqa: F841
 
             return str(eval(re.findall(self.regex["eval"], code)[0]))
         elif re.search(self.regex["function"], code) is not None:
@@ -399,6 +406,16 @@ class GenerateTest:
             return str(value) if not is_ghost else ""
 
     # Utils
+
+    def randint(self, start: int, stop: int) -> int:
+        if start in [0, 1] and stop >= int(1e9):
+            bit_len = 0
+            while stop > 0:
+                bit_len += 1
+                stop //= 2
+            return random.getrandbits(bit_len)
+        else:
+            return random.randint(start, stop)
 
     def execute(self, white_list: List[int] = []) -> None:
         self.log.info("Compiling & executing code...")
