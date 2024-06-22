@@ -169,7 +169,10 @@ class GenerateTest:
                 ind += 1
         for root, dirs, files in os.walk(f"{os.getcwd()}/{self.oj_format_path}"):
             for file in files:
-                if len(re_generate) == 0 or int(re.findall(r"\d+", file)[0]) - 1 in re_generate:
+                if (
+                    len(re_generate) == 0
+                    or int(re.findall(r"\d+", file)[0]) - 1 in re_generate
+                ):
                     os.remove(f"{root}/{file}")
         self.log.info("Cleaning old testcases successfully!")
 
@@ -192,7 +195,6 @@ class GenerateTest:
 
         code_lines = self.test_code.split("\n")
 
-
         def func(index: int, config: Range):
             self.log.info(f"[TEST {index + 1}] Generating...")
             test = ""
@@ -212,9 +214,9 @@ class GenerateTest:
                 else:
                     break
             test = "\n".join([ind for ind in test.split("\n") if ind.strip()])
-            os.mkdir(f"{os.getcwd()}/{self.test_path}/TEST_{index + 1}")
+            os.mkdir(f"{os.getcwd()}/{self.test_path}/{index + 1}") # TEST_{index + 1}
             with open(
-                f"{os.getcwd()}/{self.test_path}/TEST_{index + 1}/{self.name.upper()}.INP",
+                f"{os.getcwd()}/{self.test_path}/{index + 1}/{self.name.upper()}.INP",
                 "w",
             ) as f:
                 f.write(test)
@@ -224,9 +226,9 @@ class GenerateTest:
                     "w",
                 ) as f:
                     f.write(test)
-            
+
             return
-    
+
         if len(re_generate) == 0:
             for index, config in enumerate(configs[: self.test_count]):
                 func(index, config)
@@ -238,7 +240,9 @@ class GenerateTest:
 
     # Parsing
 
-    def parse_cmd_line(self, code: str, split: str = " ", metadata: Dict[str, Any] = {}) -> str:
+    def parse_cmd_line(
+        self, code: str, split: str = " ", metadata: Dict[str, Any] = {}
+    ) -> str:
         # print(code, f"'{split}'")
         if (
             re.search(self.regex["array_1d"], code) is not None
@@ -249,8 +253,12 @@ class GenerateTest:
 
         cmds = code.split(";")
 
-        return split.join([self.parse_command(cmd, metadata) for cmd in cmds]) if len(cmds) > 1 else self.parse_command(cmds[0], metadata=metadata) + split
-    
+        return (
+            split.join([self.parse_command(cmd, metadata) for cmd in cmds])
+            if len(cmds) > 1
+            else self.parse_command(cmds[0], metadata=metadata) + split
+        )
+
     def parse_array(self, code: str) -> str:
         result: str = ""
 
@@ -276,7 +284,9 @@ class GenerateTest:
             else " "
         )
         is_array_sequence = re.search(self.regex["array_sequence"], command) is not None
-        is_array_reverse_sequence = re.search(self.regex["array_reverse_sequence"], command) is not None
+        is_array_reverse_sequence = (
+            re.search(self.regex["array_reverse_sequence"], command) is not None
+        )
 
         if is_array_sequence:
             start, stop = [
@@ -331,7 +341,10 @@ class GenerateTest:
                 last_value = value
                 value += split
             else:
-                vals = [self.parse_cmd_line(command, split, { "row": row, "column": column }) for column in range(columns)]
+                vals = [
+                    self.parse_cmd_line(command, split, {"row": row, "column": column})
+                    for column in range(columns)
+                ]
                 value = "".join(vals)
                 # print(vals)
 
@@ -342,13 +355,15 @@ class GenerateTest:
     def parse_command(self, code: str, metadata: Dict[str, Any] = {}) -> str:
         if re.search(self.regex["assign"], code) is not None:
             key, cmd = re.findall(self.regex["assign"], code)[0]
-            
+
             is_ghost = "ghost" in key
             if "ghost" in key:
                 key = key.replace("ghost", "")
             key.strip()
-            
-            value = str(cmd if cmd.isdigit() else self.cache.get(cmd, self.parse_command(cmd)))
+
+            value = str(
+                cmd if cmd.isdigit() else self.cache.get(cmd, self.parse_command(cmd))
+            )
             self.cache[key] = value
 
             return value if not is_ghost else ""
@@ -356,21 +371,34 @@ class GenerateTest:
             key = re.findall(self.regex["value"], code)[0][0]
             return str(self.cache.get(key, key))
         elif re.search(self.regex["range"], code) is not None:
-            start, stop = [int(self.cache.get(ind, ind)) for ind in re.findall(self.regex["range"], code)[0]]
-            return str(random.randint(min(start, stop), max(start, stop))) if start != stop else str(start)
+            start, stop = [
+                int(self.cache.get(ind, ind))
+                for ind in re.findall(self.regex["range"], code)[0]
+            ]
+            return (
+                str(random.randint(min(start, stop), max(start, stop)))
+                if start != stop
+                else str(start)
+            )
         elif re.search(self.regex["eval"], code) is not None:
 
             def get(key: str) -> str:
                 return self.cache.get(key, key)
-            row = metadata.get("row", -1) # noqa: F841
-            column = metadata.get("column", -1) # noqa: F841
+
+            row = metadata.get("row", -1)  # noqa: F841
+            column = metadata.get("column", -1)  # noqa: F841
 
             return str(eval(re.findall(self.regex["eval"], code)[0]))
         elif re.search(self.regex["function"], code) is not None:
             func, args = re.findall(self.regex["function"], code)[0]
             if func == "string":
                 string, length = args.split(", ")
-                return "".join(random.choices(self.define[string].range[0], k=int(self.cache.get(length, length)))) # type: ignore
+                return "".join(
+                    random.choices(
+                        self.define[string].range[0],
+                        k=int(self.cache.get(length, length)),
+                    )
+                )  # type: ignore
             else:
                 raise ValueError(f"Unsupport function: {func}")
         else:
@@ -385,18 +413,25 @@ class GenerateTest:
             variable_limit = variable_define.range
             variable_range: List[float] = (
                 self.tmp["range"]
-                if not isinstance(self.tmp["range"][0], list) and not isinstance(self.tmp["range"][0], tuple)
+                if not isinstance(self.tmp["range"][0], list)
+                and not isinstance(self.tmp["range"][0], tuple)
                 else self.tmp["range"][
                     list(self.define.keys()).index(variable_define.name)
                 ]
             )
             # print(variable_define, variable_limit, variable_range)
             value = (
-                random.choices(variable_limit[0]) # type: ignore
+                random.choices(variable_limit[0])  # type: ignore
                 if variable_define.data_type == "char"
                 else random.randint(
-                    int((variable_limit[1] - variable_limit[0]) * variable_range[0] + variable_limit[0]), # type: ignore
-                    int((variable_limit[1] - variable_limit[0]) * variable_range[1] + variable_limit[0]), # type: ignore
+                    int(
+                        (variable_limit[1] - variable_limit[0]) * variable_range[0]
+                        + variable_limit[0]
+                    ),  # type: ignore
+                    int(
+                        (variable_limit[1] - variable_limit[0]) * variable_range[1]
+                        + variable_limit[0]
+                    ),  # type: ignore
                 )
             )
 
@@ -422,7 +457,7 @@ class GenerateTest:
         if not self.code_path:
             raise ValueError("code_path is not defined")
 
-        executble_file = "main.exe" if os.name == "nt" else "main"
+        executble_file = "main.exe" if os.name == "nt" else "./main"
         executble_path = f"{"/".join(self.code_path.split("/")[:-1])}/{executble_file}"
         if self.language == "cpp":
             gpp_path = shutil.which("g++") or "g++"
@@ -475,7 +510,9 @@ class GenerateTest:
                 code = callback.returncode
                 if code != 0:
                     self.log.error(stderr)
-                    raise ValueError(f"executable file throw code {code} at test {ind + 1}")
+                    raise ValueError(
+                        f"executable file throw code {code} at test {ind + 1}"
+                    )
                 else:
                     self.log.info(f"[EXECUTE] Excuted test [{dir}] successfully!")
 
@@ -485,7 +522,9 @@ class GenerateTest:
                         f"{os.getcwd()}/{self.oj_format_path}/{self.name.upper()}_{ind + 1}.OUT",
                     )
 
-                if ("configs" in self.tmp) and self.tmp["configs"][ind].post_function is not None:
+                if ("configs" in self.tmp) and self.tmp["configs"][
+                    ind
+                ].post_function is not None:
                     with open(f"{root}/{dir}/{self.name}.OUT", "r") as f:
                         stdout = f.read()
                         cb = self.tmp["configs"][ind].post_function(stdout)
@@ -494,7 +533,9 @@ class GenerateTest:
 
         if len(regenerates) > 0:
             self.log.info("Regenerating testcases due to post_function request...")
-            self.log.info(f"Regenrate testcases: {", ".join([str(ind) for ind in regenerates])}\n")
+            self.log.info(
+                f"Regenrate testcases: {", ".join([str(ind) for ind in regenerates])}\n"
+            )
             self.generate_test(regenerates)
             self.execute(regenerates)
 

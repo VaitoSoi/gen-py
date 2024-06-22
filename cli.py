@@ -4,6 +4,7 @@ import yaml
 import importlib.util
 import re
 import time
+import os
 
 
 def __import__(file_path: str):
@@ -35,7 +36,6 @@ def __main__():
         "-g",
         action="store_true",
         help="Generate testcases",
-        # metavar="generate",
     )
     parser.add_argument(
         "--execute",
@@ -56,6 +56,11 @@ def __main__():
         help="Save testcases",
     )
     parser.add_argument(
+        "--count",
+        "-c",
+        help="Count testcases"
+    )
+    parser.add_argument(
         "--test",
         action="store_true",
         help="Not implemented yet :(",
@@ -72,10 +77,10 @@ def __main__():
                 limit=ind["limit"] if isinstance(ind["limit"][0], int) else [tuple(i) for i in ind["limit"]],
                 count=ind["count"],
                 test_function=__import__(ind["test_function"] or ind["function"])
-                if "TestFunction" in ind or "function" in ind
+                if "test_function" in ind or "function" in ind
                 else None,
-                post_function=__import__(ind["post_function"] or ind["function"])
-                if "PostFunction" in ind or "post_function" in ind
+                post_function=__import__(ind["post_function"])
+                if "post_function" in ind or "post_function" in ind
                 else None,
             )
             for ind in file["TestRange"]
@@ -123,6 +128,16 @@ def __main__():
 
     if args.save:
         generator.save()
+
+    if args.count:
+        count = 0
+        for dir_name in os.listdir(config.test_path):
+            dir_path = os.path.join(config.test_path, dir_name)
+            if os.path.isdir(dir_path):
+                with open(os.path.join(dir_path, f"{config.name}.OUT"), "r") as file:
+                    if file.readline() == args.count:
+                        count += 1
+        print(f"Total testcase's outputs with content \"{args.count}\": {count}")
 
     if args.test:
         start = time.time()
