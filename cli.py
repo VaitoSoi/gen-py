@@ -80,7 +80,10 @@ def __main__():
                 if "test_function" in ind or "function" in ind
                 else None,
                 post_function=__import__(ind["post_function"])
-                if "post_function" in ind or "post_function" in ind
+                if "post_function" in ind
+                else None,
+                generate_function=__import__(ind["generate_function"])
+                if "generate_function" in ind
                 else None,
             )
             for ind in file["TestRange"]

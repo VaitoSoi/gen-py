@@ -21,6 +21,7 @@ class Range(BaseModel):
     count: int | float
     test_function: Optional[Callable[[str, Any], bool]]
     post_function: Optional[Callable[[str, Any], bool]]
+    generate_function: Optional[Callable[[str, Any], str]]
 
 
 class GenerateTestProperties(BaseModel):
@@ -143,7 +144,7 @@ class GenerateTest:
             name = args[0]
             data_type = args[1]
             range = (
-                (args[2] if len(args) == 3 else args[2] + " ",)  # type: Tuple[str]
+                (args[2] if not line.endswith(" ") else args[2] + " ",)  # type: Tuple[str]
                 if data_type == "char"
                 else (float(args[2]), float(args[3]))  # type: Tuple[float, float]
                 if data_type == "int"
@@ -197,23 +198,26 @@ class GenerateTest:
 
         def func(index: int, config: Range):
             self.log.info(f"[TEST {index + 1}] Generating...")
-            test = ""
-            while True:
-                # self.tmp = {}
-                self.tmp["range"] = config.limit
+            if config.generate_function is not None:
+                test = config.generate_function(index)
+            else:
                 test = ""
-                for line in code_lines:
-                    if line == "":
-                        continue
-                    test += self.parse_cmd_line(line) + "\n"
-                if config.test_function is not None:
-                    if config.test_function(test, index):
-                        break
+                while True:
+                    # self.tmp = {}
+                    self.tmp["range"] = config.limit
+                    test = ""
+                    for line in code_lines:
+                        if line == "":
+                            continue
+                        test += self.parse_line(line) + "\n"
+                    if config.test_function is not None:
+                        if config.test_function(test, index):
+                            break
+                        else:
+                            self.log.info(f"[TEST {index + 1}] Regenerating...")
                     else:
-                        self.log.info(f"[TEST {index + 1}] Regenerating...")
-                else:
-                    break
-            test = "\n".join([ind for ind in test.split("\n") if ind.strip()])
+                        break
+                test = "\n".join([" ".join(ind.split()) for ind in test.split("\n") if ind.strip()])
             os.mkdir(f"{os.getcwd()}/{self.test_path}/{index + 1}") # TEST_{index + 1}
             with open(
                 f"{os.getcwd()}/{self.test_path}/{index + 1}/{self.name.upper()}.INP",
@@ -240,7 +244,7 @@ class GenerateTest:
 
     # Parsing
 
-    def parse_cmd_line(
+    def parse_line(
         self, code: str, split: str = " ", metadata: Dict[str, Any] = {}
     ) -> str:
         # print(code, f"'{split}'")
@@ -342,7 +346,7 @@ class GenerateTest:
                 value += split
             else:
                 vals = [
-                    self.parse_cmd_line(command, split, {"row": row, "column": column})
+                    self.parse_line(command, split, {"row": row, "column": column})
                     for column in range(columns)
                 ]
                 value = "".join(vals)
@@ -390,7 +394,7 @@ class GenerateTest:
 
             return str(eval(re.findall(self.regex["eval"], code)[0]))
         elif re.search(self.regex["function"], code) is not None:
-            func, args = re.findall(self.regex["function"], code)[0]
+            func, args = re.findall(self.regex["function"], code.strip())[0]
             if func == "string":
                 string, length = args.split(", ")
                 return "".join(
@@ -421,7 +425,7 @@ class GenerateTest:
             )
             # print(variable_define, variable_limit, variable_range)
             value = (
-                random.choices(variable_limit[0])  # type: ignore
+                random.choices(variable_limit[0])[0]  # type: ignore
                 if variable_define.data_type == "char"
                 else random.randint(
                     int(
@@ -442,15 +446,15 @@ class GenerateTest:
 
     # Utils
 
-    def randint(self, start: int, stop: int) -> int:
-        if start in [0, 1] and stop >= int(1e9):
-            bit_len = 0
-            while stop > 0:
-                bit_len += 1
-                stop //= 2
-            return random.getrandbits(bit_len)
-        else:
-            return random.randint(start, stop)
+    # def randint(self, start: int, stop: int) -> int:
+    #     if start in [0, 1] and stop >= int(1e9):
+    #         bit_len = 0
+    #         while stop > 0:
+    #             bit_len += 1
+    #             stop //= 2
+    #         return random.getrandbits(bit_len)
+    #     else:
+    #         return random.randint(start, stop)
 
     def execute(self, white_list: List[int] = []) -> None:
         self.log.info("Compiling & executing code...")
